@@ -108,6 +108,30 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
 
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -160,7 +184,7 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
-  SSHSecurityGroup:
+  BastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupName: "ssh-sg"
@@ -179,43 +203,16 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName} SSH Security group
 
-  PrivateLinkSecurityGroup:
+  AppSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "private-link-sq"
-      GroupDescription: "PrivateLink Security group"
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 8080
-          ToPort: 8080
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: icmp
-          FromPort: -1
-          ToPort: -1
-          CidrIp: 0.0.0.0/0
-      VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName} PrivateLink Security group
-
-  ECSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: "ecs-app-sg"
-      GroupDescription: "ECS App Security group"
+      GroupName: "app-sg"
+      GroupDescription: "App Security group"
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          SourceSecurityGroupId: !Ref SSHSecurityGroup
+          SourceSecurityGroupId: !Ref BastionSecurityGroup
           Description: 'from bastion'
         - IpProtocol: tcp
           FromPort: 80
@@ -240,89 +237,34 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} ECS App Security group
+          Value: !Sub ${EnvironmentName} App Security group
 
-  VpcEndpointKinesis:
-    Type: AWS::EC2::VPCEndpoint
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
+      GroupName: "alb-sg"
+      GroupDescription: "ALB App Security group"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
       VpcId: !Ref VPC
-      ServiceName: !Join ['', ['com.amazonaws.', !Ref 'AWS::Region', '.kinesis-streams']]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref PrivateLinkSecurityGroup
-
-  VpcEndpointDynamoDB:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Join ['', ['com.amazonaws.', !Ref 'AWS::Region', '.dynamodb']]
-      VpcEndpointType: Gateway
-      RouteTableIds:
-        - !Ref PrivateRouteTable
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Action: '*'
-            Resource: '*'
-            Principal: '*'
-
-  VpcEndpointS3:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Join ['', ['com.amazonaws.', !Ref 'AWS::Region', '.s3']]
-      VpcEndpointType: Gateway
-      RouteTableIds:
-        - !Ref PrivateRouteTable
-      PolicyDocument:
-        Statement:
-          - Effect: Allow
-            Action: '*'
-            Resource: '*'
-            Principal: '*'
-
-  VpcEndpointECRdkr:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Join ['', ['com.amazonaws.', !Ref 'AWS::Region', '.ecr.dkr']]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref PrivateLinkSecurityGroup
-
-  VpcEndpointLogs:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Join ['', ['com.amazonaws.', !Ref 'AWS::Region', '.logs']]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref PrivateLinkSecurityGroup
-
-  VpcEndpointMonitoring:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcId: !Ref VPC
-      ServiceName: !Join ['', ['com.amazonaws.', !Ref 'AWS::Region', '.monitoring']]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-      SecurityGroupIds:
-        - !Ref PrivateLinkSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} ALB App Security group
 
 Outputs:
   VPC:
@@ -353,14 +295,14 @@ Outputs:
     Description: A reference to the private subnet in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
 
-  SSHSecurityGroup:
+  BastionSecurityGroup:
     Description: SSH Security group
-    Value: !Ref SSHSecurityGroup
+    Value: !Ref BastionSecurityGroup
 
-  PrivateLinkSecurityGroup:
-    Description: PrivateLink Security group
-    Value: !Ref PrivateLinkSecurityGroup
+  AppSecurityGroup:
+    Description: App Security group
+    Value: !Ref AppSecurityGroup
 
-  ECSSecurityGroup:
-    Description: ECS App Security group
-    Value: !Ref ECSSecurityGroup
+  ALBSecurityGroup:
+    Description: ALB Security group
+    Value: !Ref ALBSecurityGroup

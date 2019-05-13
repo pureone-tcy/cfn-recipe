@@ -206,7 +206,7 @@ Resources:
   PrivateLinkSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "private-link-sq"
+      GroupName: "private-link-sg"
       GroupDescription: "PrivateLink Security group"
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -230,11 +230,11 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName} PrivateLink Security group
 
-  ECSSecurityGroup:
+  AppSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "ecs-app-sg"
-      GroupDescription: "ECS App Security group"
+      GroupName: "app-sg"
+      GroupDescription: "App Security group"
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
@@ -385,6 +385,6 @@ Outputs:
     Description: PrivateLink Security group
     Value: !Ref PrivateLinkSecurityGroup
 
-  ECSSecurityGroup:
-    Description: ECS App Security group
-    Value: !Ref ECSSecurityGroup
+  AppSecurityGroup:
+    Description: App Security group
+    Value: !Ref AppSecurityGroup
